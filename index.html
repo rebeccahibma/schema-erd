@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Schema ERD</title>
+
+
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; overflow: hidden; background: #020617; }
+    select option { background: #0f172a; color: white; }
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── Initial schema data ────────────────────────────────────────────────────
+const INITIAL_SCHEMA = {
+  tables: [
+    { id: "calls", name: "calls", schema: "tegus", database: "base", description: "", x: 80, y: 360, columns: [
+      { id: "c1", name: "id", type: "VARCHAR", isPrimary: true, notes: "" },
+      { id: "c2", name: "project_id", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "c3", name: "advisor_id", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "c4", name: "admin_id", type: "VARCHAR", isPrimary: false, notes: "admin_id of the analyst who owns the call" },
+      { id: "c5", name: "user_id", type: "VARCHAR", isPrimary: false, notes: "user_id of the client user on the call" },
+      { id: "c6", name: "recommended_advisor_id", type: "VARCHAR", isPrimary: false, notes: "" },
+    ]},
+    { id: "projects", name: "projects", schema: "tegus", database: "base", description: "", x: 480, y: 200, columns: [
+      { id: "p1", name: "id", type: "VARCHAR", isPrimary: true, notes: "" },
+      { id: "p2", name: "firm_id", type: "VARCHAR", isPrimary: false, notes: "" },
+    ]},
+    { id: "firms", name: "firms", schema: "tegus", database: "base", description: "One row per call taking team / user group", x: 480, y: 560, columns: [
+      { id: "f1", name: "id", type: "VARCHAR", isPrimary: true, notes: "" },
+      { id: "f2", name: "account_manager_id", type: "VARCHAR", isPrimary: false, notes: "admin_id of the current client research manager" },
+    ]},
+    { id: "admins", name: "admins", schema: "tegus", database: "base", description: "One row per internal user of BetterAdmin", x: 80, y: 700, columns: [
+      { id: "ad1", name: "id", type: "VARCHAR", isPrimary: true, notes: "" },
+      { id: "ad2", name: "name", type: "VARCHAR", isPrimary: false, notes: "" },
+    ]},
+    { id: "advisors", name: "advisors", schema: "tegus", database: "", description: "One row per expert in our backend", x: 80, y: 960, columns: [
+      { id: "av1", name: "id", type: "VARCHAR", isPrimary: true, notes: "" },
+      { id: "av2", name: "admin_id", type: "VARCHAR", isPrimary: false, notes: "The analyst who created this expert" },
+    ]},
+    { id: "recommended_advisors", name: "recommended_advisors", schema: "tegus", database: "base", description: "One row per expert per project", x: 480, y: 380, columns: [
+      { id: "ra1", name: "id", type: "VARCHAR", isPrimary: true, notes: "" },
+      { id: "ra2", name: "project_id", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "ra3", name: "advisor_id", type: "VARCHAR", isPrimary: false, notes: "" },
+    ]},
+    { id: "users", name: "users", schema: "tegus", database: "base", description: "One row per client user of call services", x: 480, y: 760, columns: [
+      { id: "u1", name: "id", type: "VARCHAR", isPrimary: true, notes: "" },
+      { id: "u2", name: "firm_id", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "u3", name: "email", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "u4", name: "ams_user_id", type: "VARCHAR", isPrimary: false, notes: "" },
+    ]},
+    { id: "project_memberships", name: "project_memberships", schema: "tegus", database: "base", description: "One row per client user per project", x: 900, y: 300, columns: [
+      { id: "pm1", name: "id", type: "VARCHAR", isPrimary: true, notes: "" },
+      { id: "pm2", name: "project_id", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "pm3", name: "user_id", type: "VARCHAR", isPrimary: false, notes: "" },
+    ]},
+    { id: "subscriptions", name: "subscriptions", schema: "salesforce_alphasense", database: "base", description: "Each subscription corresponds to a firm in BA", x: 900, y: 560, columns: [
+      { id: "s1", name: "id", type: "VARCHAR", isPrimary: true, notes: "" },
+      { id: "s2", name: "better_admin_firm_id_c", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "s3", name: "account_c", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "s4", name: "client_research_manager_c", type: "VARCHAR", isPrimary: false, notes: "Syncs to update account_manager_id in BA" },
+    ]},
+    { id: "account", name: "account", schema: "salesforce_alphasense", database: "base", description: "", x: 1320, y: 400, columns: [
+      { id: "ac1", name: "id", type: "VARCHAR", isPrimary: true, notes: "" },
+      { id: "ac2", name: "account_owner_name_c", type: "VARCHAR", isPrimary: false, notes: "AE on the account" },
+      { id: "ac3", name: "account_manager_name_c", type: "VARCHAR", isPrimary: false, notes: "Use this not the account manager on the sub" },
+    ]},
+    { id: "contact", name: "contact", schema: "salesforce_alphasense", database: "base", description: "", x: 1320, y: 760, columns: [
+      { id: "ct1", name: "account_id", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "ct2", name: "ams_user_id", type: "VARCHAR", isPrimary: false, notes: "" },
+    ]},
+    { id: "subscription_member", name: "subscription_member", schema: "salesforce_alphasense", database: "base", description: "", x: 900, y: 960, columns: [
+      { id: "sm1", name: "id", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "sm2", name: "better_admin_firm_id_c", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "sm3", name: "as_subscription_id_c", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "sm4", name: "contact_id", type: "VARCHAR", isPrimary: false, notes: "" },
+    ]},
+    { id: "expert_calls_pool", name: "expert_calls_pool", schema: "salesforce_alphasense", database: "base", description: "Source of truth for payment info for a given firm", x: 1320, y: 200, columns: [
+      { id: "ec1", name: "id", type: "VARCHAR", isPrimary: true, notes: "" },
+      { id: "ec2", name: "as_subscription_c", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "ec3", name: "better_admin_firm_id_c", type: "VARCHAR", isPrimary: false, notes: "" },
+    ]},
+    { id: "expert_call_transaction", name: "expert_call_transaction", schema: "salesforce_alphasense", database: "base", description: "One record per ECS product added to this call pool", x: 1740, y: 200, columns: [
+      { id: "et1", name: "expert_calls_pool_id_c", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "et2", name: "opportunity_c", type: "VARCHAR", isPrimary: false, notes: "The opportunity that contains the product" },
+    ]},
+    { id: "opportunity", name: "opportunity", schema: "salesforce_alphasense", database: "base", description: "One line per opportunity", x: 1740, y: 560, columns: [
+      { id: "op1", name: "id", type: "VARCHAR", isPrimary: true, notes: "" },
+      { id: "op2", name: "account_id", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "op3", name: "subscription_c", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "op4", name: "client_research_manager_c", type: "VARCHAR", isPrimary: false, notes: "SFDC user id of the CRM" },
+      { id: "op5", name: "type", type: "VARCHAR", isPrimary: false, notes: "Exclude Consumption and Upsell at Renewal" },
+      { id: "op6", name: "stage_name", type: "VARCHAR", isPrimary: false, notes: "Filter to '%won%' for closed won" },
+    ]},
+    { id: "opportunity_line_item", name: "opportunity_line_item", schema: "salesforce_alphasense", database: "", description: "", x: 1740, y: 900, columns: [
+      { id: "oli1", name: "opportunity_id", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "oli2", name: "product_code", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "oli3", name: "total_price", type: "VARCHAR", isPrimary: false, notes: "Shows how much the product cost" },
+    ]},
+    { id: "product", name: "product", schema: "salesforce_alphasense", database: "base", description: "One line per product available to be added to opportunities", x: 2160, y: 900, columns: [
+      { id: "pr1", name: "product_code", type: "VARCHAR", isPrimary: true, notes: "" },
+      { id: "pr2", name: "name", type: "VARCHAR", isPrimary: false, notes: "" },
+    ]},
+    { id: "user_sf", name: "user", schema: "salesforce_alphasense", database: "base", description: "One row per salesforce user (internal AS employees)", x: 2160, y: 560, columns: [
+      { id: "usf1", name: "id", type: "VARCHAR", isPrimary: true, notes: "" },
+      { id: "usf2", name: "employee_id", type: "VARCHAR", isPrimary: false, notes: "For CRMs, contains their admin_id" },
+    ]},
+    { id: "c_historic", name: "c_historic_customer_operations_roster", schema: "common", database: "data_mart_prod", description: "One row per Expert Insights IC per month", x: 80, y: 120, columns: [
+      { id: "ch1", name: "roster_mth", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "ch2", name: "tegus_admin_id", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "ch3", name: "name", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "ch4", name: "role_2025", type: "VARCHAR", isPrimary: false, notes: "" },
+      { id: "ch5", name: "role_type_2025", type: "VARCHAR", isPrimary: false, notes: "" },
+    ]},
+  ],
+  relationships: [
+    { id: "r1",  from: "calls",              fromCol: "project_id",               to: "projects",             toCol: "id",                      notes: "" },
+    { id: "r2",  from: "calls",              fromCol: "admin_id",                 to: "admins",               toCol: "id",                      notes: "" },
+    { id: "r3",  from: "calls",              fromCol: "user_id",                  to: "users",                toCol: "id",                      notes: "" },
+    { id: "r4",  from: "calls",              fromCol: "recommended_advisor_id",   to: "recommended_advisors", toCol: "id",                      notes: "" },
+    { id: "r5",  from: "projects",           fromCol: "id",                       to: "recommended_advisors", toCol: "project_id",              notes: "" },
+    { id: "r6",  from: "projects",           fromCol: "id",                       to: "project_memberships",  toCol: "project_id",              notes: "" },
+    { id: "r7",  from: "projects",           fromCol: "firm_id",                  to: "firms",                toCol: "id",                      notes: "" },
+    { id: "r8",  from: "advisors",           fromCol: "id",                       to: "recommended_advisors", toCol: "advisor_id",              notes: "One to many" },
+    { id: "r9",  from: "advisors",           fromCol: "admin_id",                 to: "admins",               toCol: "id",                      notes: "" },
+    { id: "r10", from: "admins",             fromCol: "id",                       to: "firms",                toCol: "account_manager_id",      notes: "" },
+    { id: "r11", from: "admins",             fromCol: "id",                       to: "user_sf",              toCol: "employee_id",             notes: "" },
+    { id: "r12", from: "c_historic",         fromCol: "tegus_admin_id",           to: "admins",               toCol: "id",                      notes: "Join on admin_id AND correct month" },
+    { id: "r13", from: "firms",              fromCol: "id",                       to: "users",                toCol: "firm_id",                 notes: "" },
+    { id: "r14", from: "firms",              fromCol: "id",                       to: "subscriptions",        toCol: "better_admin_firm_id_c",  notes: "" },
+    { id: "r15", from: "firms",              fromCol: "id",                       to: "subscription_member",  toCol: "better_admin_firm_id_c",  notes: "" },
+    { id: "r16", from: "users",              fromCol: "id",                       to: "project_memberships",  toCol: "user_id",                 notes: "" },
+    { id: "r17", from: "users",              fromCol: "ams_user_id",              to: "contact",              toCol: "ams_user_id",             notes: "" },
+    { id: "r18", from: "subscriptions",      fromCol: "id",                       to: "expert_calls_pool",    toCol: "as_subscription_c",       notes: "" },
+    { id: "r19", from: "subscriptions",      fromCol: "id",                       to: "subscription_member",  toCol: "as_subscription_id_c",   notes: "" },
+    { id: "r20", from: "subscriptions",      fromCol: "account_c",                to: "account",              toCol: "id",                      notes: "" },
+    { id: "r21", from: "subscriptions",      fromCol: "id",                       to: "opportunity",          toCol: "subscription_c",          notes: "" },
+    { id: "r22", from: "account",            fromCol: "id",                       to: "contact",              toCol: "account_id",              notes: "" },
+    { id: "r23", from: "account",            fromCol: "id",                       to: "opportunity",          toCol: "account_id",              notes: "" },
+    { id: "r24", from: "expert_calls_pool",  fromCol: "id",                       to: "expert_call_transaction", toCol: "expert_calls_pool_id_c", notes: "" },
+    { id: "r25", from: "opportunity",        fromCol: "id",                       to: "opportunity_line_item",toCol: "opportunity_id",          notes: "" },
+    { id: "r26", from: "opportunity",        fromCol: "client_research_manager_c",to: "user_sf",              toCol: "id",                      notes: "" },
+    { id: "r27", from: "opportunity_line_item", fromCol: "product_code",          to: "product",              toCol: "product_code",            notes: "" },
+  ]
+};
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+const MIN_TABLE_W = 180;
+const COL_H = 28;
+const HEADER_H = 56;
+
+function calcTableWidth(name) { return Math.max(MIN_TABLE_W, name.length * 8 + 64); }
+function uid() { return Math.random().toString(36).slice(2, 9); }
+function getTableWidth(t) { return t.width || calcTableWidth(t.name); }
+function getTableHeight(t) { return HEADER_H + t.columns.length * COL_H + 8; }
+
+const SCHEMA_COLORS = {
+  "tegus":                 { accent: "#3b82f6", light: "#1e3a5f" },
+  "salesforce_alphasense": { accent: "#a855f7", light: "#3b1a5f" },
+  "common":                { accent: "#22c55e", light: "#1a3a1a" },
+  "":                      { accent: "#94a3b8", light: "#2a2a2a" },
+};
+
+// ─── Geometry helpers ────────────────────────────────────────────────────────
+function getColAnchorPoint(table, colName, side) {
+  const w = getTableWidth(table);
+  const idx = table.columns.findIndex(c => c.name === colName);
+  const rowY = idx >= 0
+    ? table.y + HEADER_H + 4 + idx * COL_H + (COL_H - 2) / 2
+    : table.y + getTableHeight(table) / 2;
+  return side === "right" ? { x: table.x + w, y: rowY } : { x: table.x, y: rowY };
+}
+function getBestSide(from, to) {
+  return from.x + getTableWidth(from) / 2 <= to.x + getTableWidth(to) / 2 ? "right" : "left";
+}
+
+// ─── Shared styles ───────────────────────────────────────────────────────────
+const inputStyle = {
+  background: "rgba(255,255,255,0.05)", border: "1px solid rgba(148,163,184,0.2)",
+  borderRadius: 6, color: "white", padding: "8px 10px", fontSize: 12, width: "100%",
+  boxSizing: "border-box", fontFamily: "'JetBrains Mono', monospace", outline: "none",
+};
+const btnStyle = (v = "primary") => ({
+  padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 12,
+  fontFamily: "'JetBrains Mono', monospace", fontWeight: 600,
+  background: v === "primary" ? "#3b82f6" : v === "danger" ? "#ef4444" : "rgba(255,255,255,0.1)",
+  color: "white",
+});
+
+// ─── RelEdge ─────────────────────────────────────────────────────────────────
+function RelEdge({ rel, tables, selected, onClick, onUpdateEndpoint, svgRef }) {
+  const fromT = tables.find(t => t.id === rel.from);
+  const toT   = tables.find(t => t.id === rel.to);
+  const [hovered, setHovered]     = useState(false);
+  const [dragging, setDragging]   = useState(null);
+  const [ghostPos, setGhostPos]   = useState(null);
+  const [snapTarget, setSnapTarget] = useState(null);
+  if (!fromT || !toT) return null;
+
+  const fSide = getBestSide(fromT, toT);
+  const tSide = fSide === "right" ? "left" : "right";
+  const fp = getColAnchorPoint(fromT, rel.fromCol, fSide);
+  const tp = getColAnchorPoint(toT,   rel.toCol,   tSide);
+
+  const dx = Math.abs(fp.x - tp.x);
+  const offset = Math.min(120, Math.max(40, dx * 0.4));
+  const cx  = fSide === "right" ? fp.x + offset : fp.x - offset;
+  const cx2 = tSide === "left"  ? tp.x - offset : tp.x + offset;
+  const pathD = `M ${fp.x} ${fp.y} C ${cx} ${fp.y}, ${cx2} ${tp.y}, ${tp.x} ${tp.y}`;
+
+  // Bezier midpoint at t=0.5
+  const midX = 0.125*fp.x + 3*0.125*cx + 3*0.125*cx2 + 0.125*tp.x;
+  const midY = 0.125*fp.y + 3*0.125*fp.y + 3*0.125*tp.y + 0.125*tp.y;
+
+  const hasNote  = rel.notes && rel.notes.trim().length > 0;
+  const isHighlit = selected || hovered;
+
+  // Tooltip word-wrap
+  const tooltipLines = [];
+  if (hasNote && hovered) {
+    const words = rel.notes.split(' ');
+    let line = '';
+    for (const w of words) {
+      const test = line ? line + ' ' + w : w;
+      if (test.length * 7 > 184) { tooltipLines.push(line); line = w; } else line = test;
+    }
+    if (line) tooltipLines.push(line);
+  }
+
+  function svgPoint(e) {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    const svgPt = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const g = svg.querySelector('g[data-viewport]');
+    if (!g) return svgPt;
+    const vx = parseFloat(g.dataset.vx || 0), vy = parseFloat(g.dataset.vy || 0), vs = parseFloat(g.dataset.vs || 1);
+    return { x: (svgPt.x - vx) / vs, y: (svgPt.y - vy) / vs };
+  }
+
+  function findNearestCol(cx, cy, excludeId) {
+    let best = null, bestDist = 40;
+    for (const tbl of tables) {
+      if (tbl.id === excludeId) continue;
+      const tw = getTableWidth(tbl);
+      tbl.columns.forEach((col, i) => {
+        const rowY = tbl.y + HEADER_H + 4 + i * COL_H + (COL_H - 2) / 2;
+        for (const side of ["left", "right"]) {
+          const ax = side === "right" ? tbl.x + tw : tbl.x;
+          const dist = Math.hypot(cx - ax, cy - rowY);
+          if (dist < bestDist) { bestDist = dist; best = { tableId: tbl.id, colName: col.name, side, x: ax, y: rowY }; }
+        }
+      });
+    }
+    return best;
+  }
+
+  function startDrag(e, end) {
+    e.stopPropagation();
+    setDragging(end);
+    const onMove = me => {
+      const pos = svgPoint(me);
+      setGhostPos(pos);
+      setSnapTarget(findNearestCol(pos.x, pos.y, end === "from" ? rel.to : rel.from));
+    };
+    const onUp = me => {
+      const pos = svgPoint(me);
+      const snap = findNearestCol(pos.x, pos.y, end === "from" ? rel.to : rel.from);
+      if (snap) onUpdateEndpoint(rel.id, end, snap.tableId, snap.colName);
+      setDragging(null); setGhostPos(null); setSnapTarget(null);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  const ghostAnchor = dragging === "from" ? tp : fp;
+
+  return (
+    <g onClick={e => { if (!dragging) { e.stopPropagation(); onClick(rel.id); } }} style={{ cursor: "pointer" }}>
+      <path d={pathD} fill="none" stroke="transparent" strokeWidth={12} />
+      <path d={pathD} fill="none"
+        stroke={isHighlit ? "#f59e0b" : "rgba(148,163,184,0.35)"}
+        strokeWidth={isHighlit ? 2 : 1.5}
+        strokeDasharray={selected ? "none" : "6 3"}
+        style={{ transition: dragging ? "none" : "stroke 0.15s" }}
+      />
+      <circle cx={fp.x} cy={fp.y} r={3} fill={isHighlit ? "#f59e0b" : "rgba(148,163,184,0.5)"} />
+      <circle cx={tp.x} cy={tp.y} r={4} fill="none" stroke={isHighlit ? "#f59e0b" : "rgba(148,163,184,0.5)"} strokeWidth={2} />
+
+      {selected && <>
+        <circle cx={fp.x} cy={fp.y} r={7} fill="#f59e0b" fillOpacity={0.15} stroke="#f59e0b" strokeWidth={1.5}
+          onMouseDown={e => startDrag(e, "from")} style={{ cursor: "crosshair" }} />
+        <circle cx={tp.x} cy={tp.y} r={7} fill="#f59e0b" fillOpacity={0.15} stroke="#f59e0b" strokeWidth={1.5}
+          onMouseDown={e => startDrag(e, "to")} style={{ cursor: "crosshair" }} />
+      </>}
+
+      {dragging && ghostPos && (
+        <line x1={ghostAnchor.x} y1={ghostAnchor.y}
+          x2={snapTarget ? snapTarget.x : ghostPos.x} y2={snapTarget ? snapTarget.y : ghostPos.y}
+          stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 3" strokeOpacity={0.7} />
+      )}
+      {snapTarget && <circle cx={snapTarget.x} cy={snapTarget.y} r={8} fill="#f59e0b" fillOpacity={0.25} stroke="#f59e0b" strokeWidth={2} />}
+
+      {hasNote ? (
+        <g onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+          <rect x={midX-10} y={midY-10} width={20} height={20} fill="transparent" />
+          <polygon points={`${midX},${midY-7} ${midX+7},${midY} ${midX},${midY+7} ${midX-7},${midY}`}
+            fill={isHighlit ? "#f59e0b" : "#1e293b"} stroke={isHighlit ? "#f59e0b" : "#fbbf24"} strokeWidth={1.5} />
+          <text x={midX} y={midY+4} fontSize={8} fill={isHighlit ? "#0f172a" : "#fbbf24"}
+            textAnchor="middle" fontFamily="'JetBrains Mono', monospace" fontWeight={700}>i</text>
+          {hovered && tooltipLines.length > 0 && (
+            <g style={{ pointerEvents: "none" }}>
+              <rect x={midX+12} y={midY - (tooltipLines.length*16+14)/2} width={200} height={tooltipLines.length*16+14} rx={6}
+                fill="#1e293b" stroke="#fbbf24" strokeWidth={1} strokeOpacity={0.6} />
+              {tooltipLines.map((l, i) => (
+                <text key={i} x={midX+22} y={midY - (tooltipLines.length*16+14)/2 + 12 + i*16}
+                  fontSize={11} fill="#e2e8f0" fontFamily="'JetBrains Mono', monospace">{l}</text>
+              ))}
+            </g>
+          )}
+        </g>
+      ) : selected ? <circle cx={midX} cy={midY} r={4} fill="#f59e0b" /> : null}
+    </g>
+  );
+}
+
+// ─── TableNode ───────────────────────────────────────────────────────────────
+function TableNode({ table, selected, onSelect, onDragEnd, onResize, onEdit }) {
+  const nodeRef = useRef(null);
+  const [hoveredNote, setHoveredNote] = useState(null);
+  const tw = getTableWidth(table);
+  const h  = getTableHeight(table);
+  const schema = table.schema || "";
+  const colors = SCHEMA_COLORS[schema] || SCHEMA_COLORS[""];
+
+  function handleMouseDown(e) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    onSelect(table.id);
+    const startX = e.clientX, startY = e.clientY;
+    const origX = table.x, origY = table.y;
+    const getCtm = () => nodeRef.current?.closest("svg")?.getScreenCTM();
+    const onMove = me => { const c = getCtm(); if (!c) return; onDragEnd(table.id, origX + (me.clientX - startX)/c.a, origY + (me.clientY - startY)/c.d, false); };
+    const onUp   = me => { const c = getCtm(); if (c)  onDragEnd(table.id, origX + (me.clientX - startX)/c.a, origY + (me.clientY - startY)/c.d, true); window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  function handleResizeMouseDown(e) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const startX = e.clientX, origW = tw;
+    const getCtm = () => nodeRef.current?.closest("svg")?.getScreenCTM();
+    const onMove = me => { const c = getCtm(); if (!c) return; onResize(table.id, Math.max(MIN_TABLE_W, origW + (me.clientX - startX)/c.a), false); };
+    const onUp   = me => { const c = getCtm(); if (c)  onResize(table.id, Math.max(MIN_TABLE_W, origW + (me.clientX - startX)/c.a), true); window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  const shortName = table.name.length * 8 + 64 > tw
+    ? table.name.slice(0, Math.floor((tw - 64) / 8)) + "…" : table.name;
+
+  return (
+    <g ref={nodeRef} transform={`translate(${table.x},${table.y})`}>
+      <rect width={tw} height={h} rx={8}
+        fill={selected ? "#1e293b" : "#0f172a"}
+        stroke={selected ? colors.accent : "rgba(148,163,184,0.2)"}
+        strokeWidth={selected ? 2 : 1}
+        style={{ filter: selected ? `drop-shadow(0 0 8px ${colors.accent}40)` : "none" }}
+      />
+      <rect width={tw} height={HEADER_H} rx={8} fill={colors.light} />
+      <rect y={HEADER_H - 8} width={tw} height={8} fill={colors.light} />
+      <rect x={8} y={8} width={schema.length * 7 + 12} height={16} rx={4} fill={`${colors.accent}30`} />
+      <text x={14} y={19} fontSize={9} fill={colors.accent} fontFamily="'JetBrains Mono', monospace" fontWeight={600}>{schema || "unknown"}</text>
+      <text x={12} y={42} fontSize={13} fill="white" fontFamily="'JetBrains Mono', monospace" fontWeight={700}>{shortName}</text>
+      <rect width={tw - 32} height={HEADER_H} fill="transparent" onMouseDown={handleMouseDown} style={{ cursor: "grab" }} />
+      <g transform={`translate(${tw - 28},14)`} onClick={e => { e.stopPropagation(); onEdit(table.id); }} onMouseDown={e => e.stopPropagation()} style={{ cursor: "pointer", opacity: 0.7 }}>
+        <rect width={20} height={20} rx={4} fill="rgba(255,255,255,0.15)" />
+        <text x={10} y={14} fontSize={11} fill="white" textAnchor="middle">✎</text>
+      </g>
+      {table.columns.map((col, i) => {
+        const cy = HEADER_H + 4 + i * COL_H;
+        const isPK = col.isPrimary;
+        const hasNote = col.notes && col.notes.trim().length > 0;
+        const dotX = tw - 14, dotY = cy + 13;
+        const startX = isPK ? 32 : 12;
+        const endX = hasNote ? dotX - 8 : tw - 8;
+        const maxChars = Math.floor((endX - startX) / 7);
+        const colLabel = col.name.length > maxChars ? col.name.slice(0, maxChars - 1) + "…" : col.name;
+        return (
+          <g key={col.id}>
+            <rect x={4} y={cy} width={tw - 8} height={COL_H - 2} rx={4} fill={i % 2 === 0 ? "rgba(255,255,255,0.03)" : "transparent"} />
+            {isPK && <text x={12} y={cy+17} fontSize={9} fill="#f59e0b" fontFamily="'JetBrains Mono', monospace">PK</text>}
+            <text x={startX} y={cy+17} fontSize={11} fill={isPK ? "#f1f5f9" : "#94a3b8"} fontFamily="'JetBrains Mono', monospace" fontWeight={isPK ? 600 : 400}>{colLabel}</text>
+            {hasNote && (
+              <g onMouseEnter={() => setHoveredNote({ x: tw + 4, y: cy, text: col.notes })} onMouseLeave={() => setHoveredNote(null)} style={{ cursor: "default" }}>
+                <circle cx={dotX} cy={dotY} r={4} fill="#fbbf24" opacity={0.9} />
+                <text x={dotX} y={dotY+3.5} fontSize={7} fill="#0f172a" textAnchor="middle" fontWeight={700}>i</text>
+              </g>
+            )}
+          </g>
+        );
+      })}
+      {hoveredNote && (() => {
+        const words = hoveredNote.text.split(' ');
+        const lines = []; let line = '';
+        for (const w of words) { const t = line ? line + ' ' + w : w; if (t.length * 7 > 204) { lines.push(line); line = w; } else line = t; }
+        if (line) lines.push(line);
+        const tipH = lines.length * 16 + 16;
+        return (
+          <g style={{ pointerEvents: "none" }}>
+            <rect x={hoveredNote.x} y={hoveredNote.y} width={220} height={tipH} rx={6} fill="#1e293b" stroke="#fbbf24" strokeWidth={1} strokeOpacity={0.6} />
+            {lines.map((l, i) => <text key={i} x={hoveredNote.x+10} y={hoveredNote.y+13+i*16} fontSize={11} fill="#e2e8f0" fontFamily="'JetBrains Mono', monospace">{l}</text>)}
+          </g>
+        );
+      })()}
+      <rect x={tw - 5} y={8} width={10} height={h - 16} rx={3} fill="transparent" onMouseDown={handleResizeMouseDown} style={{ cursor: "ew-resize" }} />
+      {selected && (
+        <g style={{ pointerEvents: "none" }}>
+          <rect x={tw - 4} y={h/2 - 12} width={4} height={24} rx={2} fill="rgba(148,163,184,0.25)" />
+          <line x1={tw-3} y1={h/2-6} x2={tw-3} y2={h/2+6} stroke="rgba(148,163,184,0.5)" strokeWidth={1} />
+          <line x1={tw-1} y1={h/2-6} x2={tw-1} y2={h/2+6} stroke="rgba(148,163,184,0.5)" strokeWidth={1} />
+        </g>
+      )}
+    </g>
+  );
+}
+
+// ─── Modal ───────────────────────────────────────────────────────────────────
+function Modal({ title, onClose, children }) {
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }} onClick={onClose}>
+      <div style={{ background:"#0f172a", border:"1px solid rgba(148,163,184,0.2)", borderRadius:12, padding:24, minWidth:480, maxWidth:640, maxHeight:"80vh", overflowY:"auto", color:"white" }} onClick={e => e.stopPropagation()}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <h2 style={{ margin:0, fontSize:16, fontFamily:"'JetBrains Mono', monospace", color:"#f1f5f9" }}>{title}</h2>
+          <button onClick={onClose} style={{ background:"rgba(255,255,255,0.1)", border:"none", color:"white", width:28, height:28, borderRadius:6, cursor:"pointer", fontSize:14 }}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── TableEditor ─────────────────────────────────────────────────────────────
+function TableEditor({ table, onSave, onDelete, onClose }) {
+  const [t, setT] = useState({ ...table, columns: table.columns.map(c => ({ ...c })) });
+  const updateCol = (id, key, val) => setT(p => ({ ...p, columns: p.columns.map(c => c.id === id ? { ...c, [key]: val } : c) }));
+  const addCol    = () => setT(p => ({ ...p, columns: [...p.columns, { id: uid(), name: "new_column", type: "VARCHAR", isPrimary: false, notes: "" }] }));
+  const removeCol = id => setT(p => ({ ...p, columns: p.columns.filter(c => c.id !== id) }));
+  return (
+    <Modal title={`Edit: ${table.name}`} onClose={onClose}>
+      <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          {[["TABLE NAME","name"],["SCHEMA","schema"],["DATABASE","database"],["DESCRIPTION","description"]].map(([label, key]) => (
+            <div key={key}>
+              <label style={{ fontSize:10, color:"#64748b", fontFamily:"'JetBrains Mono', monospace" }}>{label}</label>
+              <input style={inputStyle} value={t[key] || ""} onChange={e => setT(p => ({ ...p, [key]: e.target.value }))} />
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop:8 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+            <label style={{ fontSize:10, color:"#64748b", fontFamily:"'JetBrains Mono', monospace" }}>COLUMNS</label>
+            <button style={btnStyle("secondary")} onClick={addCol}>+ Add column</button>
+          </div>
+          {t.columns.map(col => (
+            <div key={col.id} style={{ marginBottom:8, background:"rgba(255,255,255,0.03)", borderRadius:6, padding:"6px 8px", border:"1px solid rgba(148,163,184,0.08)" }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 80px 40px 24px", gap:4, marginBottom:4, alignItems:"center" }}>
+                <input style={inputStyle} value={col.name} onChange={e => updateCol(col.id, "name", e.target.value)} placeholder="column_name" />
+                <input style={inputStyle} value={col.type} onChange={e => updateCol(col.id, "type", e.target.value)} placeholder="VARCHAR" />
+                <label style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, color:"#64748b", cursor:"pointer", fontFamily:"'JetBrains Mono', monospace" }}>
+                  <input type="checkbox" checked={col.isPrimary} onChange={e => updateCol(col.id, "isPrimary", e.target.checked)} /> PK
+                </label>
+                <button onClick={() => removeCol(col.id)} style={{ background:"rgba(239,68,68,0.2)", border:"none", color:"#ef4444", borderRadius:4, cursor:"pointer", fontSize:12 }}>✕</button>
+              </div>
+              <input style={{ ...inputStyle, fontSize:11, color:"#64748b", borderColor: col.notes ? "rgba(251,191,36,0.3)" : "rgba(148,163,184,0.1)" }}
+                value={col.notes || ""} onChange={e => updateCol(col.id, "notes", e.target.value)} placeholder="Notes (optional)…" />
+            </div>
+          ))}
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", marginTop:8 }}>
+          <button style={btnStyle("danger")} onClick={() => onDelete(table.id)}>Delete table</button>
+          <div style={{ display:"flex", gap:8 }}>
+            <button style={btnStyle("secondary")} onClick={onClose}>Cancel</button>
+            <button style={btnStyle("primary")} onClick={() => onSave(t)}>Save changes</button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── RelEditor ───────────────────────────────────────────────────────────────
+function RelEditor({ rel, tables, onSave, onDelete, onClose }) {
+  const [r, setR] = useState(rel ? { ...rel } : { id: uid(), from: "", fromCol: "", to: "", toCol: "", notes: "" });
+  const fromTable = tables.find(t => t.id === r.from);
+  const toTable   = tables.find(t => t.id === r.to);
+  return (
+    <Modal title={rel ? "Edit relationship" : "Add relationship"} onClose={onClose}>
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          <div>
+            <label style={{ fontSize:10, color:"#64748b", fontFamily:"'JetBrains Mono', monospace" }}>FROM TABLE</label>
+            <select style={{ ...inputStyle }} value={r.from} onChange={e => setR(p => ({ ...p, from: e.target.value, fromCol: "" }))}>
+              <option value="">Select table…</option>
+              {tables.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize:10, color:"#64748b", fontFamily:"'JetBrains Mono', monospace" }}>FROM COLUMN</label>
+            <select style={{ ...inputStyle }} value={r.fromCol} onChange={e => setR(p => ({ ...p, fromCol: e.target.value }))}>
+              <option value="">Select column…</option>
+              {(fromTable?.columns || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize:10, color:"#64748b", fontFamily:"'JetBrains Mono', monospace" }}>TO TABLE</label>
+            <select style={{ ...inputStyle }} value={r.to} onChange={e => setR(p => ({ ...p, to: e.target.value, toCol: "" }))}>
+              <option value="">Select table…</option>
+              {tables.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize:10, color:"#64748b", fontFamily:"'JetBrains Mono', monospace" }}>TO COLUMN</label>
+            <select style={{ ...inputStyle }} value={r.toCol} onChange={e => setR(p => ({ ...p, toCol: e.target.value }))}>
+              <option value="">Select column…</option>
+              {(toTable?.columns || []).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label style={{ fontSize:10, color:"#64748b", fontFamily:"'JetBrains Mono', monospace" }}>NOTES</label>
+          <input style={inputStyle} value={r.notes} onChange={e => setR(p => ({ ...p, notes: e.target.value }))} placeholder="Optional note…" />
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", marginTop:8 }}>
+          {rel ? <button style={btnStyle("danger")} onClick={() => onDelete(rel.id)}>Delete</button> : <div />}
+          <div style={{ display:"flex", gap:8 }}>
+            <button style={btnStyle("secondary")} onClick={onClose}>Cancel</button>
+            <button style={btnStyle("primary")} onClick={() => onSave(r)} disabled={!r.from || !r.to}>Save</button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── AddTableModal ───────────────────────────────────────────────────────────
+function AddTableModal({ onSave, onClose }) {
+  const [t, setT] = useState({ name: "", schema: "tegus", database: "base", description: "" });
+  return (
+    <Modal title="Add new table" onClose={onClose}>
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          {[["TABLE NAME","name"],["SCHEMA","schema"],["DATABASE","database"],["DESCRIPTION","description"]].map(([label, key]) => (
+            <div key={key}>
+              <label style={{ fontSize:10, color:"#64748b", fontFamily:"'JetBrains Mono', monospace" }}>{label}</label>
+              <input style={inputStyle} value={t[key]} onChange={e => setT(p => ({ ...p, [key]: e.target.value }))} />
+            </div>
+          ))}
+        </div>
+        <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:8 }}>
+          <button style={btnStyle("secondary")} onClick={onClose}>Cancel</button>
+          <button style={btnStyle("primary")} onClick={() => onSave(t)} disabled={!t.name.trim()}>Create table</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+
+
+// ─── App ─────────────────────────────────────────────────────────────────────
+function App() {
+  const [schema, setSchema]             = useState(INITIAL_SCHEMA);
+  const [viewport, setViewport]         = useState({ x: 0, y: 0, scale: 0.72 });
+  const [selected, setSelected]         = useState(null);
+  const [editingTable, setEditingTable] = useState(null);
+  const [editingRel, setEditingRel]     = useState(null);
+  const [addingTable, setAddingTable]   = useState(false);
+  const [addingRel, setAddingRel]       = useState(false);
+  const svgRef = useRef(null);
+
+  const updateSchema = useCallback((updater) => {
+    setSchema(prev => updater(prev));
+  }, []);
+
+  // Pan & zoom
+  const handleWheel = useCallback(e => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const rect = svgRef.current.getBoundingClientRect();
+    setViewport(v => {
+      const ns = Math.min(2, Math.max(0.2, v.scale * delta));
+      const sc = ns / v.scale;
+      return { scale: ns, x: (e.clientX - rect.left) - sc * ((e.clientX - rect.left) - v.x), y: (e.clientY - rect.top) - sc * ((e.clientY - rect.top) - v.y) };
+    });
+  }, []);
+
+  const handleSvgMouseDown = useCallback(e => {
+    if (e.button !== 0) return;
+    if (e.target !== svgRef.current && !e.target.closest("svg > rect")) return;
+    setSelected(null);
+    const sx = e.clientX, sy = e.clientY, sv = { ...viewport };
+    const onMove = me => setViewport({ ...sv, x: sv.x + me.clientX - sx, y: sv.y + me.clientY - sy });
+    const onUp   = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [viewport]);
+
+  const handleTableDrag = useCallback((id, nx, ny, commit) => {
+    setSchema(prev => ({ ...prev, tables: prev.tables.map(t => t.id === id ? { ...t, x: nx, y: ny } : t) }));
+  }, []);
+
+  const handleTableResize = useCallback((id, newW, commit) => {
+    setSchema(prev => ({ ...prev, tables: prev.tables.map(t => t.id === id ? { ...t, width: Math.round(newW) } : t) }));
+  }, []);
+
+  const handleSaveTable  = useCallback(u => { updateSchema(p => ({ ...p, tables: p.tables.map(t => t.id === u.id ? u : t) })); setEditingTable(null); }, [updateSchema]);
+  const handleDeleteTable = useCallback(id => { updateSchema(p => ({ tables: p.tables.filter(t => t.id !== id), relationships: p.relationships.filter(r => r.from !== id && r.to !== id) })); setEditingTable(null); setSelected(null); }, [updateSchema]);
+  const handleAddTable    = useCallback(data => { updateSchema(p => ({ ...p, tables: [...p.tables, { id: uid(), ...data, width: calcTableWidth(data.name), x: 300 + Math.random()*400, y: 300 + Math.random()*300, columns: [{ id: uid(), name: "id", type: "VARCHAR", isPrimary: true, notes: "" }] }] })); setAddingTable(false); }, [updateSchema]);
+  const handleSaveRel     = useCallback(r => { updateSchema(p => { const e = p.relationships.find(x => x.id === r.id); return e ? { ...p, relationships: p.relationships.map(x => x.id === r.id ? r : x) } : { ...p, relationships: [...p.relationships, r] }; }); setEditingRel(null); setAddingRel(false); }, [updateSchema]);
+  const handleDeleteRel   = useCallback(id => { updateSchema(p => ({ ...p, relationships: p.relationships.filter(r => r.id !== id) })); setEditingRel(null); setSelected(null); }, [updateSchema]);
+  const handleUpdateEndpoint = useCallback((relId, end, tableId, colName) => {
+    updateSchema(p => ({ ...p, relationships: p.relationships.map(r => r.id !== relId ? r : end === "from" ? { ...r, from: tableId, fromCol: colName } : { ...r, to: tableId, toCol: colName }) }));
+  }, [updateSchema]);
+
+  const fitView = useCallback(() => {
+    if (!schema || !svgRef.current) return;
+    const xs = schema.tables.map(t => t.x), ys = schema.tables.map(t => t.y);
+    const x2s = schema.tables.map(t => t.x + getTableWidth(t)), y2s = schema.tables.map(t => t.y + getTableHeight(t));
+    const minX = Math.min(...xs)-40, minY = Math.min(...ys)-40, maxX = Math.max(...x2s)+40, maxY = Math.max(...y2s)+40;
+    const W = svgRef.current.clientWidth, H = svgRef.current.clientHeight;
+    const scale = Math.min(0.9, Math.min(W/(maxX-minX), H/(maxY-minY)));
+    setViewport({ x: -minX*scale + (W-(maxX-minX)*scale)/2, y: -minY*scale + (H-(maxY-minY)*scale)/2, scale });
+  }, [schema]);
+
+  useEffect(() => { setTimeout(fitView, 100); }, []);
+
+  const selectedRel   = schema?.relationships.find(r => r.id === selected);
+  const selectedTable = schema?.tables.find(t => t.id === selected);
+
+  return (
+    <div style={{ background:"#020617", height:"100vh", display:"flex", flexDirection:"column", overflow:"hidden", userSelect:"none" }}>
+
+      {/* Toolbar */}
+      <div style={{ height:52, background:"#0a0f1e", borderBottom:"1px solid rgba(148,163,184,0.1)", display:"flex", alignItems:"center", padding:"0 16px", gap:12, flexShrink:0 }}>
+        <span style={{ fontFamily:"'JetBrains Mono', monospace", fontSize:13, color:"#3b82f6", fontWeight:700, marginRight:8 }}>⬡ schema</span>
+        <div style={{ width:1, height:24, background:"rgba(148,163,184,0.15)" }} />
+        <button style={{ ...btnStyle("primary"), fontSize:11 }} onClick={() => setAddingTable(true)}>+ Table</button>
+        <button style={{ ...btnStyle("secondary"), fontSize:11 }} onClick={() => setAddingRel(true)}>+ Relationship</button>
+        <div style={{ width:1, height:24, background:"rgba(148,163,184,0.15)" }} />
+        <button style={{ ...btnStyle("secondary"), fontSize:11 }} onClick={fitView}>⊡ Fit</button>
+        <button style={{ ...btnStyle("secondary"), fontSize:11 }} onClick={() => setViewport(v => ({ ...v, scale: Math.min(2, v.scale * 1.2) }))}>+</button>
+        <button style={{ ...btnStyle("secondary"), fontSize:11 }} onClick={() => setViewport(v => ({ ...v, scale: Math.max(0.2, v.scale / 1.2) }))}>−</button>
+        <span style={{ fontFamily:"'JetBrains Mono', monospace", fontSize:10, color:"#475569" }}>{Math.round(viewport.scale * 100)}%</span>
+        <div style={{ flex:1 }} />
+        {Object.entries(SCHEMA_COLORS).filter(([k]) => k).map(([s, c]) => (
+          <div key={s} style={{ display:"flex", alignItems:"center", gap:4 }}>
+            <div style={{ width:8, height:8, borderRadius:2, background:c.accent }} />
+            <span style={{ fontFamily:"'JetBrains Mono', monospace", fontSize:9, color:"#64748b" }}>{s}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Info bar */}
+      {(selectedTable || selectedRel) && (
+        <div style={{ background:"#0a0f1e", borderBottom:"1px solid rgba(148,163,184,0.1)", padding:"6px 16px", display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
+          {selectedTable && <>
+            <span style={{ fontFamily:"'JetBrains Mono', monospace", fontSize:11, color:"#94a3b8" }}>
+              <span style={{ color:"#3b82f6" }}>{selectedTable.schema}</span>.<span style={{ color:"white" }}>{selectedTable.name}</span>
+              {selectedTable.description && <span style={{ color:"#475569" }}> — {selectedTable.description}</span>}
+            </span>
+            <button style={{ ...btnStyle("secondary"), fontSize:10, padding:"4px 10px" }} onClick={() => setEditingTable(selectedTable.id)}>Edit</button>
+          </>}
+          {selectedRel && <>
+            <span style={{ fontFamily:"'JetBrains Mono', monospace", fontSize:11, color:"#94a3b8" }}>
+              <span style={{ color:"#f59e0b" }}>{schema.tables.find(t=>t.id===selectedRel.from)?.name}.{selectedRel.fromCol}</span>
+              <span style={{ color:"#475569" }}> → </span>
+              <span style={{ color:"#f59e0b" }}>{schema.tables.find(t=>t.id===selectedRel.to)?.name}.{selectedRel.toCol}</span>
+              {selectedRel.notes && <span style={{ color:"#475569" }}> — {selectedRel.notes}</span>}
+            </span>
+            <button style={{ ...btnStyle("secondary"), fontSize:10, padding:"4px 10px" }} onClick={() => setEditingRel(selectedRel)}>Edit</button>
+            <button style={{ ...btnStyle("danger"),   fontSize:10, padding:"4px 10px" }} onClick={() => handleDeleteRel(selectedRel.id)}>Delete</button>
+          </>}
+        </div>
+      )}
+
+      {/* Canvas */}
+      <svg ref={svgRef} style={{ flex:1, cursor:"crosshair", display:"block" }}
+        onWheel={handleWheel} onMouseDown={handleSvgMouseDown} onClick={() => setSelected(null)}>
+        <defs>
+          <pattern id="grid" x={viewport.x % (20*viewport.scale)} y={viewport.y % (20*viewport.scale)} width={20*viewport.scale} height={20*viewport.scale} patternUnits="userSpaceOnUse">
+            <circle cx={1} cy={1} r={0.7} fill="rgba(148,163,184,0.08)" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)" />
+        <g data-viewport="1" data-vx={viewport.x} data-vy={viewport.y} data-vs={viewport.scale}
+          transform={`translate(${viewport.x},${viewport.y}) scale(${viewport.scale})`}>
+          {schema.relationships.map(rel => (
+            <RelEdge key={rel.id} rel={rel} tables={schema.tables}
+              selected={selected === rel.id} onClick={id => setSelected(p => p === id ? null : id)}
+              onUpdateEndpoint={handleUpdateEndpoint} svgRef={svgRef} />
+          ))}
+          {schema.tables.map(table => (
+            <TableNode key={table.id} table={table} selected={selected === table.id}
+              onSelect={id => setSelected(p => p === id ? null : id)}
+              onDragEnd={handleTableDrag} onResize={handleTableResize} onEdit={id => setEditingTable(id)} />
+          ))}
+        </g>
+      </svg>
+
+      {/* Status bar */}
+      <div style={{ height:28, background:"#0a0f1e", borderTop:"1px solid rgba(148,163,184,0.08)", display:"flex", alignItems:"center", padding:"0 16px", gap:16, flexShrink:0 }}>
+        <span style={{ fontFamily:"'JetBrains Mono', monospace", fontSize:10, color:"#475569" }}>
+          {schema.tables.length} tables · {schema.relationships.length} relationships · scroll to zoom · drag to pan
+        </span>
+        <div style={{ flex:1 }} />
+        <span style={{ fontFamily:"'JetBrains Mono', monospace", fontSize:10, color:"#334155" }}>
+          read-only view · ask Claude to update
+        </span>
+      </div>
+
+      {editingTable && <TableEditor table={schema.tables.find(t => t.id === editingTable)} onSave={handleSaveTable} onDelete={handleDeleteTable} onClose={() => setEditingTable(null)} />}
+      {(addingRel || editingRel) && <RelEditor rel={editingRel || null} tables={schema.tables} onSave={handleSaveRel} onDelete={handleDeleteRel} onClose={() => { setAddingRel(false); setEditingRel(null); }} />}
+      {addingTable && <AddTableModal onSave={handleAddTable} onClose={() => setAddingTable(false)} />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
